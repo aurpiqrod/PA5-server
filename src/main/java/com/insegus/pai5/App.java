@@ -1,6 +1,5 @@
 package com.insegus.pai5;
 
-import java.io.FileWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
