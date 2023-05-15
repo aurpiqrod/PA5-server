@@ -7,6 +7,7 @@ import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
 import java.io.BufferedReader;
@@ -27,9 +28,11 @@ import java.security.PublicKey;
 import java.security.Signature;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Properties;
 import java.util.Queue;
+import java.util.Set;
 import java.util.function.Function;
 
 import javax.net.ssl.*;
@@ -54,6 +57,31 @@ public class App {
             requestTimestamps.offer(now);
             return false;
         }
+    }
+
+    private static boolean isRequestValid(JSONObject requestData) {
+        String[] allowedFields = { "camas", "mesas", "sabanas", "sillas", "sillones", "signature" };
+        Set<String> allowedFieldsSet = new HashSet<>(Arrays.asList(allowedFields));
+        int furnitureFieldsCount = 0;
+    
+        for (String key : requestData.keySet()) {
+            if (!allowedFieldsSet.contains(key)) {
+                return false; // Campo no permitido
+            }
+            if (!key.equals("signature")) {
+                int value = requestData.optInt(key, -1);
+            
+                if (value < 0 || value > 300) {
+                    return false; // Valor fuera del rango permitido
+                }
+            
+                if (value > 0) {
+                    furnitureFieldsCount++; // Incrementa solo si el valor es mayor que cero
+                }
+            }
+        }
+    
+        return furnitureFieldsCount > 0; // Al menos un campo de muebles presente
     }
 
     private static X509Certificate getClientCertificate(String clientCertPath) {
@@ -83,7 +111,7 @@ public class App {
             signatureInstance.update(data.getBytes("UTF-8"));
 
             // Decodificar la firma en Base64
-            byte[] signatureBytes = Base64.getDecoder().decode(signature);
+            byte[] signatureBytes = Base64.getDecoder().decode(signature.getBytes());
 
             // Verificar la firma
             boolean isSignatureValid = signatureInstance.verify(signatureBytes);
@@ -184,13 +212,14 @@ public class App {
                     output.println("Límite de solicitudes alcanzado");
                     output.flush();
                 } else {
-
                     // Leer la petición completa del cliente
                     String clientRequest = input.readLine();
                     System.out.println("Petición recibida: " + clientRequest);
 
                     // Parsear la petición del cliente como un objeto JSON
                     JSONObject requestData = new JSONObject(clientRequest);
+
+                    boolean requestHasValidFields = isRequestValid(requestData);
 
                     // Extraer y mostrar los datos del objeto JSON
                     // System.out.println("Datos del cliente: " + requestData.toString(2));
@@ -200,7 +229,7 @@ public class App {
                     boolean isSignatureValid = false;
                     X509Certificate clientCertificate = getClientCertificate(clientCertPath);
 
-                    if (signature != null) {
+                    if (signature != null && requestHasValidFields) {
                         // Verificar la firma utilizando el certificado público del cliente
                         requestData.remove("signature");
                         isSignatureValid = verifySignature(requestData.toString(), signature, clientCertificate);
@@ -214,7 +243,7 @@ public class App {
                         }
                     } else {
                         // No se proporcionó una firma, rechazar la solicitud
-                        System.out.println("La solicitud no está firmada. La solicitud será rechazada.");
+                        System.out.println("La solicitud no está firmada o contiene campos incorrectos. La solicitud será rechazada.");
                     }
 
                     // Extraer y mostrar los datos del objeto JSON
