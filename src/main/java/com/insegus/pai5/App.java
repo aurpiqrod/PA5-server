@@ -127,11 +127,11 @@ public class App {
   
                   // Obtener la firma de la solicitud
                   String signature = requestData.optString("signature");
-  
+                  boolean isSignatureValid = false;
                   if (signature != null) {
                       // Verificar la firma utilizando el certificado público del cliente
                       requestData.remove("signature");
-                      boolean isSignatureValid = verifySignature(requestData.toString(), signature, clientCertPath);
+                      isSignatureValid = verifySignature(requestData.toString(), signature, clientCertPath);
   
                       if (isSignatureValid) {
                           // La firma es válida, proceder con el procesamiento de la solicitud
@@ -150,9 +150,9 @@ public class App {
   
                   // Abrir PrintWriter para enviar datos al cliente
                   PrintWriter output = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()));
-  
+                  String response = isSignatureValid ? "Petición OK" : "Petición INCORRECTA";
                   // Enviar una respuesta al cliente
-                  output.println("Petición recibida y procesada.");
+                  output.println(response);
                   output.flush(); // Asegúrate de que la respuesta se envíe antes de cerrar los recursos
   
                   // Cerrar recursos
