@@ -39,7 +39,14 @@ import javax.net.ssl.*;
 
 public class App {
     private static Map<String, Queue<LocalDateTime>> clientRequests = new HashMap<>();
-
+    private static String getValueFromField(String[] fields, String fieldName) {
+        for (String field : fields) {
+            if (field.startsWith(fieldName + "=")) {
+                return field.substring(fieldName.length() + 1); // Obtener el valor después del igual
+            }
+        }
+        return "";
+    }
     private static boolean hasReachedRequestLimit(Queue<LocalDateTime> requestTimestamps, int maxRequests, int hours) {
         LocalDateTime now = LocalDateTime.now();
 
@@ -63,24 +70,24 @@ public class App {
         String[] allowedFields = { "camas", "mesas", "sabanas", "sillas", "sillones", "signature" };
         Set<String> allowedFieldsSet = new HashSet<>(Arrays.asList(allowedFields));
         int furnitureFieldsCount = 0;
-    
+
         for (String key : requestData.keySet()) {
             if (!allowedFieldsSet.contains(key)) {
                 return false; // Campo no permitido
             }
             if (!key.equals("signature")) {
                 int value = requestData.optInt(key, -1);
-            
+
                 if (value < 0 || value > 300) {
                     return false; // Valor fuera del rango permitido
                 }
-            
+
                 if (value > 0) {
                     furnitureFieldsCount++; // Incrementa solo si el valor es mayor que cero
                 }
             }
         }
-    
+
         return furnitureFieldsCount > 0; // Al menos un campo de muebles presente
     }
 
@@ -178,7 +185,8 @@ public class App {
             // Crear el archivo CSV si no existe y agregar encabezados
             String csvFileName = "requests.csv";
             if (!Files.exists(Paths.get(csvFileName))) {
-                Files.write(Paths.get(csvFileName), "Date,Client,Request,Result\n".getBytes(),
+                Files.write(Paths.get(csvFileName),
+                        "Fecha,CN,OU,O,L,ST,C,camas,mesas,sabanas,sillas,sillones,Solicitud,Resultado\n".getBytes(),
                         StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             }
 
@@ -243,7 +251,8 @@ public class App {
                         }
                     } else {
                         // No se proporcionó una firma, rechazar la solicitud
-                        System.out.println("La solicitud no está firmada o contiene campos incorrectos. La solicitud será rechazada.");
+                        System.out.println(
+                                "La solicitud no está firmada o contiene campos incorrectos. La solicitud será rechazada.");
                     }
 
                     // Extraer y mostrar los datos del objeto JSON
@@ -253,16 +262,30 @@ public class App {
                     // Enviar una respuesta al cliente
                     output.println(response);
                     output.flush();
-                    // Extraer información del certificado del cliente
-                    String clientInfo = clientCertificate.getSubjectX500Principal().getName();
-
                     // Obtener la fecha y hora actual
                     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
                     String currentDate = dateFormat.format(new Date());
 
-                    // Guardar la petición en el archivo CSV
-                    String csvEntry = String.format("%s,%s,\"%s\",%s\n", currentDate, clientInfo, clientRequest,
-                            response);
+                    // Extraer información del certificado del cliente
+                    String clientInfo = clientCertificate.getSubjectX500Principal().getName();
+                    String[] clientInfoFields = clientInfo.split(","); // Dividir los campos por coma
+
+                    // Crear la cadena de la fila CSV con los campos en el nuevo orden
+                    String csvEntry = String.format("%s,%s,%s,%s,%s,%s,%s,%d,%d,%d,%d,%d,\"%s\",%s\n",
+                            currentDate,
+                            getValueFromField(clientInfoFields, "CN"),
+                            getValueFromField(clientInfoFields, "OU"),
+                            getValueFromField(clientInfoFields, "O"),
+                            getValueFromField(clientInfoFields, "L"),
+                            getValueFromField(clientInfoFields, "ST"),
+                            getValueFromField(clientInfoFields, "C"),
+                            requestData.optInt("camas"),
+                            requestData.optInt("mesas"),
+                            requestData.optInt("sabanas"),
+                            requestData.optInt("sillas"),
+                            requestData.optInt("sillones"),
+                            signature,
+                            isSignatureValid ? "Petición OK" : "Petición INCORRECTA");
                     Files.write(Paths.get(csvFileName), csvEntry.getBytes(), StandardOpenOption.APPEND);
                 }
                 // Cerrar recursos
